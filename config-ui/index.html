@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>个人配置中心</title>
+    <style>
+        /* --- 全局与字体 --- */
+        :root {
+            --primary-color: #007bff;
+            --danger-color: #dc3545;
+            --success-color: #28a745;
+            --light-gray: #f8f9fa;
+            --border-color: #dee2e6;
+            --text-color: #212529;
+            --text-muted: #6c757d;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            background-color: var(--light-gray);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 960px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+
+        /* --- 标题与分隔符 --- */
+        h1, h2 {
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+        h1 { font-size: 2rem; }
+        h2 { font-size: 1.5rem; }
+        hr { border: 0; border-top: 1px solid var(--border-color); margin: 2rem 0; }
+
+        /* --- 表单与输入框 --- */
+        .form-section {
+            background: #fdfdff;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+        input[type="text"], input[type="password"], textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            box-sizing: border-box;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        input:focus, textarea:focus {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+            outline: none;
+        }
+        textarea { resize: vertical; min-height: 100px; }
+
+        /* --- 按钮 --- */
+        .btn {
+            padding: 0.6rem 1.2rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            color: white;
+        }
+        .btn-primary { background-color: var(--primary-color); }
+        .btn-primary:hover { background-color: #0069d9; }
+        .btn-danger { background-color: var(--danger-color); }
+        .btn-danger:hover { background-color: #c82333; }
+        .btn-secondary { background-color: #6c757d; color: white; }
+        .btn-secondary:hover { background-color: #5a6268; }
+        .btn-sm { padding: 0.25rem 0.5rem; font-size: 0.875rem; }
+        .action-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+
+        /* --- 表格 --- */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        th, td {
+            text-align: left;
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: middle;
+        }
+        th {
+            background-color: var(--light-gray);
+            font-weight: 600;
+        }
+        td .actions { display: flex; gap: 0.5rem; }
+        .key-cell { font-family: 'Courier New', Courier, monospace; font-weight: bold; }
+        pre { margin: 0; padding: 0.5rem; background-color: var(--light-gray); border-radius: 4px; white-space: pre-wrap; word-break: break-all; font-size: 0.9em; }
+
+        /* --- 布尔值滑动开关 --- */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 26px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: var(--success-color);
+        }
+        input:checked + .slider:before {
+            transform: translateX(24px);
+        }
+
+        /* --- 其他 --- */
+        #configFormContainer { display: none; } /* 默认隐藏表单 */
+        .status-message { text-align: center; padding: 2rem; color: var(--text-muted); }
+        .message-box { padding: 1rem; border-radius: 4px; margin-bottom: 1.5rem; display: none; }
+        .message-box.success { background-color: #d4edda; color: #155724; }
+        .message-box.error { background-color: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>个人配置中心</h1>
+        
+        <div class="form-section">
+            <label for="authToken">认证令牌 (Auth Token)</label>
+            <input type="password" id="authToken" placeholder="输入你的秘密令牌以加载和管理配置">
+        </div>
+
+        <div id="messageBox" class="message-box"></div>
+
+        <div class="action-bar">
+            <h2>配置列表</h2>
+            <button id="showAddFormBtn" class="btn btn-primary">新增配置</button>
+        </div>
+
+        <div id="configFormContainer" class="form-section">
+            <h3 id="formTitle">新增配置</h3>
+            <form id="configForm">
+                <label for="configKey">配置键 (Key)</label>
+                <input type="text" id="configKey" required>
+                <label for="configValue">配置值 (Value)</label>
+                <textarea id="configValue" rows="5" required></textarea>
+                <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
+                    <button type="submit" class="btn btn-primary">保存</button>
+                    <button type="button" class="btn btn-secondary" onclick="hideForm()">取消</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="configListContainer">
+            <div id="statusMessage" class="status-message">请输入认证令牌以加载配置列表。</div>
+            <table>
+                <thead id="configListHead" style="display:none;">
+                    <tr>
+                        <th>配置键 (Key)</th>
+                        <th>配置值 (Value)</th>
+                        <th style="width: 150px;">操作 (Actions)</th>
+                    </tr>
+                </thead>
+                <tbody id="configListBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        const WORKER_URL = 'https://config-center.huise23.workers.dev/config'; // 务必替换为你的 Worker URL
+
+        // DOM Elements
+        const authTokenInput = document.getElementById('authToken');
+        const showAddFormBtn = document.getElementById('showAddFormBtn');
+        const configFormContainer = document.getElementById('configFormContainer');
+        const formTitle = document.getElementById('formTitle');
+        const configForm = document.getElementById('configForm');
+        const configKeyInput = document.getElementById('configKey');
+        const configValueInput = document.getElementById('configValue');
+        const configListHead = document.getElementById('configListHead');
+        const configListBody = document.getElementById('configListBody');
+        const statusMessage = document.getElementById('statusMessage');
+        const messageBox = document.getElementById('messageBox');
+
+        let isEditing = false;
+
+        // --- Event Listeners ---
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedToken = localStorage.getItem('configAuthToken');
+            if (savedToken) {
+                authTokenInput.value = savedToken;
+                fetchConfigList();
+            }
+        });
+
+        authTokenInput.addEventListener('change', () => {
+            localStorage.setItem('configAuthToken', authTokenInput.value);
+            fetchConfigList();
+        });
+
+        showAddFormBtn.addEventListener('click', () => {
+            isEditing = false;
+            formTitle.textContent = '新增配置';
+            configKeyInput.value = '';
+            configValueInput.value = '';
+            configKeyInput.disabled = false;
+            configFormContainer.style.display = 'block';
+            configKeyInput.focus();
+        });
+
+        configForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const key = configKeyInput.value.trim();
+            const value = configValueInput.value;
+            if (!key) return;
+            await updateConfigValue(key, value);
+        });
+
+        // --- Core Functions ---
+        async function makeRequest(method, key = '', value = null) {
+            const token = authTokenInput.value;
+            if (!token) {
+                showMessage('请先输入认证令牌。', 'error');
+                return null;
+            }
+
+            const url = key ? `${WORKER_URL}/${key}` : WORKER_URL;
+            const headers = { 'Authorization': `Bearer ${token}` };
+            const options = { method, headers };
+
+            if (value !== null) {
+                options.body = String(value); // Ensure value is a string
+                headers['Content-Type'] = 'text/plain';
+            }
+
+            try {
+                const response = await fetch(url, options);
+                const text = await response.text();
+                if (!response.ok) throw new Error(`[${response.status}] ${text || response.statusText}`);
+                return text;
+            } catch (error) {
+                showMessage(`请求失败: ${error.message}`, 'error');
+                return null;
+            }
+        }
+
+        async function fetchConfigList() {
+            statusMessage.textContent = '正在加载...';
+            statusMessage.style.display = 'block';
+            configListHead.style.display = 'none';
+            configListBody.innerHTML = '';
+            
+            const responseText = await makeRequest('GET');
+            if (responseText) {
+                try {
+                    const configs = JSON.parse(responseText);
+                    renderConfigList(configs);
+                } catch (e) {
+                    showMessage('解析配置列表失败。', 'error');
+                    statusMessage.textContent = '加载失败，请检查令牌或网络。';
+                }
+            } else {
+                statusMessage.textContent = '加载失败，请检查令牌或网络。';
+            }
+        }
+
+        function renderConfigList(configs) {
+            if (configs.length === 0) {
+                statusMessage.textContent = '暂无配置项，点击“新增配置”来添加一个吧！';
+                statusMessage.style.display = 'block';
+                configListHead.style.display = 'none';
+                return;
+            }
+
+            statusMessage.style.display = 'none';
+            configListHead.style.display = 'table-header-group';
+            configListBody.innerHTML = '';
+
+            configs.sort((a, b) => a.key.localeCompare(b.key)).forEach(({ key, value }) => {
+                const row = document.createElement('tr');
+                
+                let valueCellHTML;
+                if (value === 'true' || value === 'false') {
+                    const isChecked = value === 'true';
+                    valueCellHTML = `
+                        <label class="toggle-switch">
+                            <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="updateConfigValue('${key}', event.target.checked)">
+                            <span class="slider"></span>
+                        </label>
+                    `;
+                } else {
+                    try {
+                        const jsonObj = JSON.parse(value);
+                        valueCellHTML = `<pre>${escapeHtml(JSON.stringify(jsonObj, null, 2))}</pre>`;
+                    } catch (e) {
+                        valueCellHTML = `<pre>${escapeHtml(value)}</pre>`;
+                    }
+                }
+
+                row.innerHTML = `
+                    <td class="key-cell">${escapeHtml(key)}</td>
+                    <td>${valueCellHTML}</td>
+                    <td>
+                        <div class="actions">
+                            <button class="btn btn-secondary btn-sm" onclick="editConfig('${key}', \`${escapeForTemplateLiteral(value)}\`)">编辑</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteConfig('${key}')">删除</button>
+                        </div>
+                    </td>
+                `;
+                configListBody.appendChild(row);
+            });
+        }
+
+        async function updateConfigValue(key, value) {
+            const result = await makeRequest('PUT', key, value);
+            if (result !== null) {
+                showMessage(`配置 '${key}' 已成功保存。`, 'success');
+                hideForm();
+                fetchConfigList();
+            }
+        }
+
+        async function deleteConfig(key) {
+            if (confirm(`确定要删除配置 '${key}' 吗？此操作不可撤销。`)) {
+                const result = await makeRequest('DELETE', key);
+                if (result !== null) {
+                    showMessage(`配置 '${key}' 已删除。`, 'success');
+                    fetchConfigList();
+                }
+            }
+        }
+
+        // --- UI Helper Functions ---
+        function editConfig(key, value) {
+            isEditing = true;
+            formTitle.textContent = `编辑: ${key}`;
+            configKeyInput.value = key;
+            configValueInput.value = value;
+            configKeyInput.disabled = true; // Key should not be changed during edit
+            configFormContainer.style.display = 'block';
+            window.scrollTo({ top: configFormContainer.offsetTop - 20, behavior: 'smooth' });
+            configValueInput.focus();
+        }
+
+        function hideForm() {
+            configFormContainer.style.display = 'none';
+            configForm.reset();
+        }
+
+        function showMessage(msg, type) {
+            messageBox.textContent = msg;
+            messageBox.className = `message-box ${type}`;
+            messageBox.style.display = 'block';
+            setTimeout(() => { messageBox.style.display = 'none'; }, 4000);
+        }
+
+        function escapeHtml(unsafe) {
+            return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+        }
+        
+        function escapeForTemplateLiteral(str) {
+            return str.replace(/`/g, '\\`').replace(/\$/g, '\\$');
+        }
+    </script>
+</body>
+</html>
