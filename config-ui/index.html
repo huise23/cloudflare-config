@@ -61,6 +61,7 @@
             border-radius: 4px;
             box-sizing: border-box;
             transition: border-color 0.2s, box-shadow 0.2s;
+            margin-bottom: 1rem; /* 增加输入框之间的间距 */
         }
         input:focus, textarea:focus {
             border-color: var(--primary-color);
@@ -68,6 +69,13 @@
             outline: none;
         }
         textarea { resize: vertical; min-height: 100px; }
+        .form-group { /* 新增：用于包裹 label 和 input/textarea */
+            margin-bottom: 1rem;
+        }
+        .form-group:last-child {
+            margin-bottom: 0;
+        }
+
 
         /* --- 按钮 --- */
         .btn {
@@ -103,7 +111,7 @@
             text-align: left;
             padding: 1rem;
             border-bottom: 1px solid var(--border-color);
-            vertical-align: middle;
+            vertical-align: top; /* 调整为top，以适应多行内容 */
         }
         th {
             background-color: var(--light-gray);
@@ -111,14 +119,38 @@
         }
         td .actions { display: flex; gap: 0.5rem; }
         .key-cell { font-family: 'Courier New', Courier, monospace; font-weight: bold; }
-        pre { margin: 0; padding: 0.5rem; background-color: var(--light-gray); border-radius: 4px; white-space: pre-wrap; word-break: break-all; font-size: 0.9em; }
+        .value-comment-container { /* 新增：用于包裹值和注释 */
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+        .config-value-display, .config-comment-display {
+            padding: 0.5rem;
+            background-color: var(--light-gray);
+            border-radius: 4px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            font-size: 0.9em;
+        }
+        .config-comment-display {
+            font-style: italic;
+            color: var(--text-muted);
+            font-size: 0.85em;
+            border-left: 3px solid #ccc;
+            padding-left: 0.8rem;
+        }
+        .config-comment-display:empty { /* 隐藏空的注释显示 */
+            display: none;
+        }
 
-        /* --- 布尔值滑动开关 --- */
+
+        /* --- 布尔值滑动开关 (如果需要，请保留) --- */
         .toggle-switch {
             position: relative;
             display: inline-block;
             width: 50px;
             height: 26px;
+            margin-top: 0.5rem; /* 调整位置 */
         }
         .toggle-switch input {
             opacity: 0;
@@ -181,10 +213,18 @@
         <div id="configFormContainer" class="form-section">
             <h3 id="formTitle">新增配置</h3>
             <form id="configForm">
-                <label for="configKey">配置键 (Key)</label>
-                <input type="text" id="configKey" required>
-                <label for="configValue">配置值 (Value)</label>
-                <textarea id="configValue" rows="5" required></textarea>
+                <div class="form-group">
+                    <label for="configKey">配置键 (Key)</label>
+                    <input type="text" id="configKey" required>
+                </div>
+                <div class="form-group">
+                    <label for="configValue">配置值 (Value)</label>
+                    <textarea id="configValue" rows="5" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="configComment">注释 (Comment)</label>
+                    <textarea id="configComment" rows="3" placeholder="可选：添加关于此配置的说明或备注"></textarea>
+                </div>
                 <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
                     <button type="submit" class="btn btn-primary">保存</button>
                     <button type="button" class="btn btn-secondary" onclick="hideForm()">取消</button>
@@ -197,8 +237,8 @@
             <table>
                 <thead id="configListHead" style="display:none;">
                     <tr>
-                        <th>配置键 (Key)</th>
-                        <th>配置值 (Value)</th>
+                        <th style="width: 25%;">配置键 (Key)</th>
+                        <th>配置值与注释 (Value & Comment)</th>
                         <th style="width: 150px;">操作 (Actions)</th>
                     </tr>
                 </thead>
@@ -208,7 +248,10 @@
     </div>
 
     <script>
-        const WORKER_URL = 'https://config-center.huise23.workers.dev/config'; // 务必替换为你的 Worker URL
+        const WORKER_URL = 'https://config.52mn.ru/config'; // 务必替换为你的 Worker URL
+        // 假设 Worker 存储的 KV 是 JSON 字符串，例如：
+        // { "value": "actual_value", "comment": "some_comment" }
+        // 或直接存储 "actual_value"
 
         // DOM Elements
         const authTokenInput = document.getElementById('authToken');
@@ -218,6 +261,7 @@
         const configForm = document.getElementById('configForm');
         const configKeyInput = document.getElementById('configKey');
         const configValueInput = document.getElementById('configValue');
+        const configCommentInput = document.getElementById('configComment'); // 新增注释输入框
         const configListHead = document.getElementById('configListHead');
         const configListBody = document.getElementById('configListBody');
         const statusMessage = document.getElementById('statusMessage');
@@ -244,6 +288,7 @@
             formTitle.textContent = '新增配置';
             configKeyInput.value = '';
             configValueInput.value = '';
+            configCommentInput.value = ''; // 清空注释
             configKeyInput.disabled = false;
             configFormContainer.style.display = 'block';
             configKeyInput.focus();
@@ -253,12 +298,23 @@
             e.preventDefault();
             const key = configKeyInput.value.trim();
             const value = configValueInput.value;
+            const comment = configCommentInput.value;
             if (!key) return;
-            await updateConfigValue(key, value);
+            
+            // 包装成 JSON 对象发送到 Worker
+            const payload = JSON.stringify({ value: value, comment: comment });
+            await updateConfig(key, payload);
         });
 
         // --- Core Functions ---
-        async function makeRequest(method, key = '', value = null) {
+        /**
+         * 发送请求到 Worker。
+         * @param {string} method HTTP 方法 (GET, PUT, DELETE)
+         * @param {string} key 配置键
+         * @param {string|null} payload 对于 PUT 请求，这是要发送的 JSON 字符串
+         * @returns {string|null} Worker 返回的文本，或 null 如果失败
+         */
+        async function makeRequest(method, key = '', payload = null) {
             const token = authTokenInput.value;
             if (!token) {
                 showMessage('请先输入认证令牌。', 'error');
@@ -269,15 +325,18 @@
             const headers = { 'Authorization': `Bearer ${token}` };
             const options = { method, headers };
 
-            if (value !== null) {
-                options.body = String(value); // Ensure value is a string
-                headers['Content-Type'] = 'text/plain';
+            if (payload !== null) {
+                options.body = payload; 
+                headers['Content-Type'] = 'application/json'; // 明确告知 Worker 发送的是 JSON
             }
 
             try {
                 const response = await fetch(url, options);
+                // 尝试解析JSON，如果失败则返回原始文本
                 const text = await response.text();
-                if (!response.ok) throw new Error(`[${response.status}] ${text || response.statusText}`);
+                if (!response.ok) {
+                    throw new Error(`[${response.status}] ${text || response.statusText}`);
+                }
                 return text;
             } catch (error) {
                 showMessage(`请求失败: ${error.message}`, 'error');
@@ -305,6 +364,11 @@
             }
         }
 
+        /**
+         * 渲染配置列表。
+         * 假设 Worker 返回的每个配置项都是 { key: string, value: any }
+         * 其中 value 可能是原始字符串，也可能是 Worker 解析后的 JSON 对象。
+         */
         function renderConfigList(configs) {
             if (configs.length === 0) {
                 statusMessage.textContent = '暂无配置项，点击“新增配置”来添加一个吧！';
@@ -317,33 +381,58 @@
             configListHead.style.display = 'table-header-group';
             configListBody.innerHTML = '';
 
-            configs.sort((a, b) => a.key.localeCompare(b.key)).forEach(({ key, value }) => {
+            configs.sort((a, b) => a.key.localeCompare(b.key)).forEach(({ key, value: rawOrParsedValue }) => {
                 const row = document.createElement('tr');
                 
-                let valueCellHTML;
-                if (value === 'true' || value === 'false') {
-                    const isChecked = value === 'true';
-                    valueCellHTML = `
+                let displayValue = '';
+                let displayComment = '';
+                let actualValueToEdit = ''; // 存储用于编辑的值
+                
+                // 检查 Worker 返回的 value 是原始字符串还是已解析的 JSON 对象
+                if (typeof rawOrParsedValue === 'object' && rawOrParsedValue !== null) {
+                    // Worker 已经解析为 { value: "...", comment: "..." } 结构
+                    displayValue = rawOrParsedValue.value !== undefined ? String(rawOrParsedValue.value) : JSON.stringify(rawOrParsedValue, null, 2);
+                    displayComment = rawOrParsedValue.comment || '';
+                    actualValueToEdit = rawOrParsedValue.value !== undefined ? String(rawOrParsedValue.value) : JSON.stringify(rawOrParsedValue);
+                } else {
+                    // Worker 返回的是原始字符串
+                    displayValue = String(rawOrParsedValue);
+                    displayComment = ''; // 默认为空，因为原始字符串没有注释
+                    actualValueToEdit = String(rawOrParsedValue);
+                }
+
+                let valueDisplayHTML;
+                // 特殊处理布尔值开关
+                if (displayValue === 'true' || displayValue === 'false') {
+                    const isChecked = displayValue === 'true';
+                    valueDisplayHTML = `
                         <label class="toggle-switch">
-                            <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="updateConfigValue('${key}', event.target.checked)">
+                            <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="updateBooleanConfig('${key}', event.target.checked, \`${escapeForTemplateLiteral(displayComment)}\`)">
                             <span class="slider"></span>
                         </label>
                     `;
                 } else {
                     try {
-                        const jsonObj = JSON.parse(value);
-                        valueCellHTML = `<pre>${escapeHtml(JSON.stringify(jsonObj, null, 2))}</pre>`;
+                        // 尝试格式化 JSON 字符串值
+                        const jsonObj = JSON.parse(displayValue);
+                        valueDisplayHTML = `<div class="config-value-display"><pre>${escapeHtml(JSON.stringify(jsonObj, null, 2))}</pre></div>`;
                     } catch (e) {
-                        valueCellHTML = `<pre>${escapeHtml(value)}</pre>`;
+                        // 否则显示为普通文本
+                        valueDisplayHTML = `<div class="config-value-display"><pre>${escapeHtml(displayValue)}</pre></div>`;
                     }
                 }
 
                 row.innerHTML = `
                     <td class="key-cell">${escapeHtml(key)}</td>
-                    <td>${valueCellHTML}</td>
+                    <td>
+                        <div class="value-comment-container">
+                            ${valueDisplayHTML}
+                            <div class="config-comment-display">${escapeHtml(displayComment)}</div>
+                        </div>
+                    </td>
                     <td>
                         <div class="actions">
-                            <button class="btn btn-secondary btn-sm" onclick="editConfig('${key}', \`${escapeForTemplateLiteral(value)}\`)">编辑</button>
+                            <button class="btn btn-secondary btn-sm" onclick="editConfig('${key}', \`${escapeForTemplateLiteral(actualValueToEdit)}\`, \`${escapeForTemplateLiteral(displayComment)}\`)">编辑</button>
                             <button class="btn btn-danger btn-sm" onclick="deleteConfig('${key}')">删除</button>
                         </div>
                     </td>
@@ -352,12 +441,33 @@
             });
         }
 
-        async function updateConfigValue(key, value) {
-            const result = await makeRequest('PUT', key, value);
+        /**
+         * 更新配置值（包括注释）。
+         * @param {string} key 配置键
+         * @param {string} payload JSON 字符串，包含 value 和 comment
+         */
+        async function updateConfig(key, payload) {
+            const result = await makeRequest('PUT', key, payload);
             if (result !== null) {
                 showMessage(`配置 '${key}' 已成功保存。`, 'success');
                 hideForm();
                 fetchConfigList();
+            }
+        }
+
+        /**
+         * 针对布尔值开关的特殊更新函数。
+         * @param {string} key 配置键
+         * @param {boolean} newValue 布尔新值
+         * @param {string} currentComment 当前的注释，以便在更新时保留
+         */
+        async function updateBooleanConfig(key, newValue, currentComment) {
+            // 直接使用传入的 currentComment
+            const payload = JSON.stringify({ value: String(newValue), comment: currentComment });
+            const result = await makeRequest('PUT', key, payload);
+            if (result !== null) {
+                showMessage(`配置 '${key}' 已更新为 ${newValue}。`, 'success');
+                fetchConfigList(); // 刷新列表以显示最新状态
             }
         }
 
@@ -372,11 +482,18 @@
         }
 
         // --- UI Helper Functions ---
-        function editConfig(key, value) {
+        /**
+         * 编辑配置时填充表单。
+         * @param {string} key 配置键
+         * @param {string} value 配置值（已解析或原始）
+         * @param {string} comment 配置注释
+         */
+        function editConfig(key, value, comment) {
             isEditing = true;
             formTitle.textContent = `编辑: ${key}`;
             configKeyInput.value = key;
             configValueInput.value = value;
+            configCommentInput.value = comment;
             configKeyInput.disabled = true; // Key should not be changed during edit
             configFormContainer.style.display = 'block';
             window.scrollTo({ top: configFormContainer.offsetTop - 20, behavior: 'smooth' });
@@ -399,8 +516,9 @@
             return unsafe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
         }
         
+        // 用于在模板字符串中嵌入变量时，避免 ` 和 $ 符号引起的问题
         function escapeForTemplateLiteral(str) {
-            return str.replace(/`/g, '\\`').replace(/\$/g, '\\$');
+            return String(str).replace(/`/g, '\\`').replace(/\$/g, '\\$');
         }
     </script>
 </body>
