@@ -1,14 +1,16 @@
 ### 简介
 基于cloudflare kv数据库及workers开发的配置中心, 可支持任意value写入
 
+### 鉴权
+
+所有请求都需要`Authorization: xxxxx`
+
 ### 列表接口
 
+> GET https://config.52mn.ru/config
+
+返回列表数据：
 ```
-GET https://config.52mn.ru/config
-Authorization: xxxxx
-
-#返回列表数据：
-
 [
     {
         "key": "pve-test",
@@ -29,8 +31,7 @@ Authorization: xxxxx
 
 ### 单条数据接口
 
-GET https://config.52mn.ru/config/test
-Authorization: xxxxx
+> GET https://config.52mn.ru/config/test
 
 返回列表数据：
 ```
@@ -43,8 +44,7 @@ Authorization: xxxxx
 ### 单条数据value接口
 
 
-GET https://config.52mn.ru/config/test/value
-Authorization: xxxxx
+> GET https://config.52mn.ru/config/test/value
 
 返回列表数据：
 ```
@@ -54,9 +54,7 @@ Authorization: xxxxx
 ### 单条数据新增/修改接口
 
 
-PUT https://config.52mn.ru/config/xxxxxkey
-Authorization: xxxxx
-Content-Type: application/json
+> PUT https://config.52mn.ru/config/xxxxxkey
 
 {
     "value":"123",
@@ -67,8 +65,7 @@ Content-Type: application/json
 ### 单条数据删除接口
 
 
-DELETE https://config.52mn.ru/config/xxxxxkey
-Authorization: xxxxx
+> DELETE https://config.52mn.ru/config/xxxxxkey
 
 
 
