@@ -1,10 +1,9 @@
-
 ### 简介
 基于cloudflare kv数据库及workers开发的配置中心, 可支持任意value写入
 
 ### 列表接口
 > GET https://config.52mn.ru/config
-Authorization: xxxxx
+> Authorization: xxxxx
 
 返回列表数据：
 ```
@@ -29,7 +28,7 @@ Authorization: xxxxx
 ### 单条数据接口
 
 > GET https://config.52mn.ru/config/test
-Authorization: xxxxx
+> Authorization: xxxxx
 
 返回列表数据：
 ```
@@ -43,7 +42,7 @@ Authorization: xxxxx
 
 
 > GET https://config.52mn.ru/config/test/value
-Authorization: xxxxx
+> Authorization: xxxxx
 
 返回列表数据：
 ```
@@ -54,20 +53,20 @@ Authorization: xxxxx
 
 
 > PUT https://config.52mn.ru/config/xxxxxkey
-Authorization: xxxxx
-Content-Type: application/json
+> Authorization: xxxxx
+> Content-Type: application/json
 
-{
-    "value":"123",
-    "comment":"aaa"
-}
+> {
+>     "value":"123",
+>     "comment":"aaa"
+> }
 
 
 ### 单条数据删除接口
 
 
 > DELETE https://config.52mn.ru/config/xxxxxkey
-Authorization: xxxxx
+> Authorization: xxxxx
 
 
 
