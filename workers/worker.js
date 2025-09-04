@@ -1,100 +1,203 @@
 // --- 配置区 ---
-// 重要：将 YOUR_PAGES_DOMAIN.pages.dev 替换为您 Cloudflare Pages 的实际域名！
-const ALLOWED_ORIGIN = 'https://config-ui.pages.dev'; 
+const ALLOWED_ORIGINS = [
+  'https://config-ui.pages.dev', // 替换为您 Cloudflare Pages 的实际域名！
+  'http://localhost:3000',
+  'http://127.0.0.1:8080',
+  'http://1.1.1.110' // 您的特定IP地址
+];
 const AUTH_TOKEN = '8ti2zSqm6Hna7xf4jUh7pcWc'; // 替换为您自己的强密码
 
-// 辅助函数：创建带有 CORS 头的响应
-function createCorsResponse(body, status, contentType = 'text/plain') {
-  const response = new Response(body, { status: status, headers: { 'Content-Type': contentType } });
-  response.headers.set('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
-  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  return response;
+// --- 辅助函数：CORS 处理 ---
+
+/**
+ * 根据请求的Origin动态创建CORS响应头。
+ * @param {string|null} requestOrigin - 请求的Origin头。
+ * @returns {Headers} 包含CORS头的Headers对象。
+ */
+function getCorsHeaders(requestOrigin) {
+  const headers = new Headers();
+  if (requestOrigin && ALLOWED_ORIGINS.includes(requestOrigin)) {
+    headers.set('Access-Control-Allow-Origin', requestOrigin);
+    headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    headers.set('Access-Control-Allow-Credentials', 'true'); // 如果需要支持凭据
+  }
+  return headers;
 }
 
-// 辅助函数：处理 OPTIONS 预检请求
-function handleOptionsRequest() {
-  const response = new Response(null, { status: 204 });
-  response.headers.set('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
-  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  response.headers.set('Access-Control-Max-Age', '86400');
-  return response;
+/**
+ * 创建一个带有CORS头的Response对象。
+ * @param {string|null} requestOrigin - 请求的Origin头。
+ * @param {string} body - 响应体。
+ * @param {number} status - HTTP状态码。
+ * @param {string} [contentType='text/plain'] - Content-Type。
+ * @returns {Response}
+ */
+function createResponse(requestOrigin, body, status, contentType = 'text/plain') {
+  const headers = getCorsHeaders(requestOrigin);
+  headers.set('Content-Type', contentType);
+  return new Response(body, { status: status, headers: headers });
 }
+
+/**
+ * 处理OPTIONS预检请求。
+ * @param {string|null} requestOrigin - 请求的Origin头。
+ * @returns {Response}
+ */
+function handlePreflight(requestOrigin) {
+  const headers = getCorsHeaders(requestOrigin);
+  headers.set('Access-Control-Max-Age', '86400'); // 缓存预检结果24小时
+  return new Response(null, { status: 204, headers: headers });
+}
+
+// --- 认证处理 ---
+
+/**
+ * 检查请求是否包含有效的认证令牌。
+ * @param {Request} request - 传入的请求对象。
+ * @returns {boolean} 如果认证有效则返回true，否则返回false。
+ */
+function isAuthenticated(request) {
+  const authHeader = request.headers.get('Authorization');
+  return authHeader === `Bearer ${AUTH_TOKEN}`;
+}
+
+// --- KV 操作方法 ---
+
+/**
+ * 从KV存储中获取原始字符串值，并尝试解析为JSON。
+ * @param {KVNamespace} kvNamespace - KV命名空间绑定。
+ * @param {string} key - 配置项的键。
+ * @returns {Promise<{rawValue: string|null, parsedValue: object|null}>} 包含原始值和尝试解析后的对象。
+ */
+async function getRawAndParsedConfig(kvNamespace, key) {
+  const rawValue = await kvNamespace.get(key);
+  let parsedValue = null;
+  if (rawValue !== null) {
+    try {
+      parsedValue = JSON.parse(rawValue);
+    } catch (e) {
+      // 不是有效的JSON，parsedValue保持为null
+    }
+  }
+  return { rawValue, parsedValue };
+}
+
+/**
+ * 在KV存储中创建或更新一个配置项。
+ * @param {KVNamespace} kvNamespace - KV命名空间绑定。
+ * @param {string} key - 配置项的键。
+ * @param {string} value - 配置项的值。
+ * @returns {Promise<void>}
+ */
+async function putConfig(kvNamespace, key, value) {
+  await kvNamespace.put(key, value);
+}
+
+/**
+ * 从KV存储中删除一个配置项。
+ * @param {KVNamespace} kvNamespace - KV命名空间绑定。
+ * @param {string} key - 配置项的键。
+ * @returns {Promise<void>}
+ */
+async function deleteConfig(kvNamespace, key) {
+  await kvNamespace.delete(key);
+}
+
+// --- 请求处理器 ---
 
 async function handleRequest(request, env) {
   const url = new URL(request.url);
   const path = url.pathname;
   const method = request.method;
+  const requestOrigin = request.headers.get('Origin'); // 获取请求的 Origin 头
 
+  // 1. 处理预检请求
   if (method === 'OPTIONS') {
-    return handleOptionsRequest();
+    return handlePreflight(requestOrigin);
   }
 
-  const authHeader = request.headers.get('Authorization');
-  if (!authHeader || authHeader !== `Bearer ${AUTH_TOKEN}`) {
-    return createCorsResponse('Unauthorized', 401);
+  // 2. 认证检查
+  if (!isAuthenticated(request)) {
+    return createResponse(requestOrigin, 'Unauthorized', 401);
   }
 
-  // 路由逻辑
-  const pathParts = path.split('/').filter(p => p); // e.g., ['config', 'my-key']
+  // 3. 路由解析
+  const pathParts = path.split('/').filter(p => p); // e.g., ['config', 'my-key', 'value']
 
   // 确保请求的是 /config 或 /config/*
   if (pathParts.length === 0 || pathParts[0] !== 'config') {
-      return createCorsResponse('Not Found', 404);
+      return createResponse(requestOrigin, 'Not Found', 404);
   }
 
-  const configKey = pathParts[1]; // undefined if path is '/config'
+  const configKey = pathParts[1]; // e.g., 'my-key'
+  const subPath = pathParts[2];   // e.g., 'value' for /config/my-key/value
 
   try {
     switch (method) {
       case 'GET':
         if (configKey) {
-          // 获取单个配置
-          const value = await env.CONFIG_KV.get(configKey);
-          if (value === null) {
-            return createCorsResponse(`Config '${configKey}' not found`, 404);
+          const { rawValue, parsedValue } = await getRawAndParsedConfig(env.CONFIG_KV, configKey);
+
+          if (rawValue === null) {
+            return createResponse(requestOrigin, `Config '${configKey}' not found`, 404);
           }
-          return createCorsResponse(value, 200, 'application/json');
+
+          if (subPath === 'value') {
+            // 请求 /config/my-key/value
+            if (parsedValue && typeof parsedValue === 'object' && parsedValue.hasOwnProperty('value')) {
+              // KV值是JSON，且包含'value'字段，返回其值
+              return createResponse(requestOrigin, String(parsedValue.value), 200, 'text/plain');
+            } else {
+              // KV值不是JSON，或者JSON中不含'value'字段，返回原始值
+              return createResponse(requestOrigin, rawValue, 200, 'text/plain');
+            }
+          } else {
+            // 请求 /config/my-key (不带 /value)
+            if (parsedValue) {
+              // 如果是有效的JSON，返回整个JSON对象
+              return createResponse(requestOrigin, JSON.stringify(parsedValue), 200, 'application/json');
+            } else {
+              // 如果不是有效的JSON，返回原始字符串
+              return createResponse(requestOrigin, rawValue, 200, 'text/plain');
+            }
+          }
         } else {
-          // 获取所有配置列表
+          // 获取所有配置项列表 /config
           const list = await env.CONFIG_KV.list();
-          const promises = list.keys.map(key => env.CONFIG_KV.get(key.name));
-          const values = await Promise.all(promises);
-          
-          const results = list.keys.map((key, index) => ({
-            key: key.name,
-            value: values[index]
-          }));
-          
-          return createCorsResponse(JSON.stringify(results), 200, 'application/json');
+          const allConfigs = [];
+          for (const key of list.keys) {
+            const { rawValue, parsedValue } = await getRawAndParsedConfig(env.CONFIG_KV, key.name);
+            allConfigs.push({ key: key.name, value: parsedValue || rawValue }); // 返回解析后的对象或原始字符串
+          }
+          return createResponse(requestOrigin, JSON.stringify(allConfigs), 200, 'application/json');
         }
 
       case 'POST':
       case 'PUT':
-        if (!configKey) return createCorsResponse('Config key is required', 400);
+        if (!configKey) return createResponse(requestOrigin, 'Config key is required', 400);
         const body = await request.text();
-        // 允许非 JSON 字符串，例如 "true" 或 "false"
-        await env.CONFIG_KV.put(configKey, body);
-        return createCorsResponse(`Config '${configKey}' updated successfully`, 200);
+        await putConfig(env.CONFIG_KV, configKey, body);
+        return createResponse(requestOrigin, `Config '${configKey}' updated successfully`, 200);
 
       case 'DELETE':
-        if (!configKey) return createCorsResponse('Config key is required', 400);
-        await env.CONFIG_KV.delete(configKey);
-        return createCorsResponse(`Config '${configKey}' deleted successfully`, 200);
+        if (!configKey) return createResponse(requestOrigin, 'Config key is required', 400);
+        await deleteConfig(env.CONFIG_KV, configKey);
+        return createResponse(requestOrigin, `Config '${configKey}' deleted successfully`, 200);
 
       default:
-        return createCorsResponse('Method Not Allowed', 405);
+        return createResponse(requestOrigin, 'Method Not Allowed', 405);
     }
   } catch (error) {
     console.error('Worker error:', error);
-    return createCorsResponse(`Internal Server Error: ${error.message}`, 500);
+    return createResponse(requestOrigin, `Internal Server Error: ${error.message}`, 500);
   }
 }
 
+// --- Worker 入口 ---
+
 export default {
   async fetch(request, env, ctx) {
-    // env.CONFIG_KV 会自动被 Cloudflare 注入
     return handleRequest(request, env);
   },
 };
