@@ -1,0 +1,7 @@
+# Cloudflare Pages Redirects 配置
+
+# 将根路径重定向到页面本身（可选）
+# /*  /index.html 200
+
+# HTTPS 重定向（如果需要）
+# http://config-ui.pages.dev/*  https://config-ui.pages.dev/:splat 301
