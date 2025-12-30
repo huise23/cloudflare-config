@@ -1,11 +1,11 @@
 // --- 配置区 ---
 const ALLOWED_ORIGINS = [
-  'https://config-ui.pages.dev', // 替换为您 Cloudflare Pages 的实际域名！
-  'http://localhost:3000',
-  'http://127.0.0.1:8080',
-  'http://1.1.1.110' // 您的特定IP地址
+  'https://config-ui.pages.dev',     // Cloudflare Pages 默认域名
+  'https://config-ui.your-domain.com', // 替换为您的自定义域名
+  'http://localhost:3000',             // 本地开发
+  'http://127.0.0.1:8080',             // 本地开发
 ];
-const AUTH_TOKEN = '8ti2zSqm6Hna7xf4jUh7pcWc'; // 替换为您自己的强密码
+const AUTH_TOKEN = '8ti2zSqm6Hna7xf4jUh7pcWc'; // ⚠️ 部署前请替换为强密码！
 
 // --- 辅助函数：CORS 处理 ---
 
@@ -104,6 +104,83 @@ async function deleteConfig(kvNamespace, key) {
   await kvNamespace.delete(key);
 }
 
+// --- 代理 API 处理 ---
+
+/**
+ * 处理代理获取远程 URL 请求
+ * 用于从远程获取 Clash 配置文件，解决 CORS 问题
+ * @param {Request} request - 请求对象
+ * @param {string} requestOrigin - 请求来源
+ * @returns {Response}
+ */
+async function handleFetchUrl(request, requestOrigin) {
+  const url = new URL(request.url);
+  const targetUrl = url.searchParams.get('url');
+
+  // 参数验证
+  if (!targetUrl) {
+    return createResponse(requestOrigin, 'Missing URL parameter', 400);
+  }
+
+  // URL 白名单验证
+  const allowedDomains = [
+    'raw.githubusercontent.com',
+    'github.com',
+    'gitlab.com',
+    'raw.githubusercontent.com.cn',
+    'ghproxy.com',
+    'gist.github.com',
+    'raw.githubusercontentusercontent.com'
+  ];
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(targetUrl);
+  } catch (e) {
+    return createResponse(requestOrigin, 'Invalid URL format', 400);
+  }
+
+  if (!allowedDomains.includes(parsedUrl.hostname)) {
+    return createResponse(requestOrigin, `Domain not allowed: ${parsedUrl.hostname}`, 403);
+  }
+
+  // 请求远程内容
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10秒超时
+
+    const response = await fetch(targetUrl, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'Clash-Config-Center/1.0'
+      }
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return createResponse(requestOrigin,
+        `Failed to fetch: HTTP ${response.status}`,
+        response.status);
+    }
+
+    const text = await response.text();
+
+    // 限制响应大小（最大 5MB）
+    if (text.length > 5 * 1024 * 1024) {
+      return createResponse(requestOrigin, 'Response too large (max 5MB)', 413);
+    }
+
+    // 返回原始内容
+    return createResponse(requestOrigin, text, 200, 'text/plain; charset=utf-8');
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      return createResponse(requestOrigin, 'Request timeout (10s)', 504);
+    }
+    return createResponse(requestOrigin, `Failed to fetch: ${error.message}`, 500);
+  }
+}
+
 // --- 请求处理器 ---
 
 async function handleRequest(request, env) {
@@ -117,7 +194,7 @@ async function handleRequest(request, env) {
     return handlePreflight(requestOrigin);
   }
 
-  // 2. 认证检查
+  // 2. 认证检查（所有 API 都需要认证）
   if (!isAuthenticated(request)) {
     return createResponse(requestOrigin, 'Unauthorized', 401);
   }
@@ -125,7 +202,12 @@ async function handleRequest(request, env) {
   // 3. 路由解析
   const pathParts = path.split('/').filter(p => p); // e.g., ['config', 'my-key', 'value']
 
-  // 确保请求的是 /config 或 /config/*
+  // 4. 代理 API 路由（优先处理）
+  if (pathParts[0] === 'api' && pathParts[1] === 'fetch-url') {
+    return handleFetchUrl(request, requestOrigin);
+  }
+
+  // 5. 确保请求的是 /config 或 /config/*
   if (pathParts.length === 0 || pathParts[0] !== 'config') {
       return createResponse(requestOrigin, 'Not Found', 404);
   }
