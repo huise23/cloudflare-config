@@ -11,9 +11,9 @@ export async function onRequest(context) {
   if (url.pathname.startsWith('/api/')) {
     // 检查是否有 WORKER 绑定
     if (env.WORKER) {
-      // 构造 Worker URL
-      const workerUrl = `https://config-center.YOUR_SUBDOMAIN.workers.dev${url.pathname}${url.search}`;
-      const workerRequest = new Request(workerUrl, {
+      // 从绑定的 Worker 构造请求
+      // 使用相同的 URL 路径和查询参���
+      const workerRequest = new Request(request.url, {
         method: request.method,
         headers: request.headers,
         body: request.body
@@ -21,7 +21,8 @@ export async function onRequest(context) {
 
       return await env.WORKER.fetch(workerRequest);
     } else {
-      return new Response('Worker binding not configured. Please bind "config-center" Worker in Pages settings.', {
+      // 没有绑定 Worker，返回错误提示
+      return new Response('Worker binding not configured.\n\n请配置步骤：\n1. Pages → Settings → Functions → Bindings\n2. Add binding: Variable: WORKER, Worker: config-center\n3. 保存并重新部署', {
         status: 503,
         headers: {
           'Content-Type': 'text/plain; charset=utf-8'
