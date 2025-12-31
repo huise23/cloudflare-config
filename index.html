@@ -623,7 +623,7 @@
                 </div>
                 <div class="form-group" id="valueGroup">
                     <label for="configValue">配置值 (Value)</label>
-                    <textarea id="configValue" rows="5" required placeholder="根据类型不同，此字段用途也不同"></textarea>
+                    <textarea id="configValue" rows="5" placeholder="根据���型不同，此字段用途也不同"></textarea>
                 </div>
                 <div class="form-group">
                     <label for="configComment">注释 (Comment)</label>
@@ -640,7 +640,8 @@
         <div id="clashRulesEditor" class="form-section" style="display: none;">
             <h3>🎯 Clash 规则快速添加</h3>
             <div style="background: var(--info-light); padding: 0.75rem; border-radius: var(--radius-sm); margin-bottom: 1rem; font-size: 0.9rem; color: #155e75;">
-                💡 <strong>使用提示</strong>：选择规则类型 → 输入规则内容（支持多行批量添加）→ 选择代理策略 → 点击"添加规则"。完成后点击"保存到配置"。
+                💡 <strong>使用提示</strong>：选择规则类型 → 输入规则内容（支持多行批量添加）→ 选择代理策略 → 点击"添加规则"。完成后点击"保存到配置"。<br>
+                <strong style="color: #c2410c;">⚠️ 重要</strong>：如果是新增配置，请先在表单中填写"配置键"，然后点击"保存到配置"。
             </div>
             <div class="clash-rule-form">
                 <div class="form-group">
@@ -805,7 +806,10 @@
             const key = configKeyInput.value.trim();
             const type = configTypeInput.value;
             const comment = configCommentInput.value;
-            if (!key) return;
+            if (!key) {
+                showMessage('请输入配置键', 'error');
+                return;
+            }
 
             let payload;
 
@@ -826,6 +830,11 @@
             } else {
                 // 其他类型：使用值输入框的内容
                 const value = configValueInput.value;
+                if (!value || value.trim() === '') {
+                    showMessage('请输入配置值', 'error');
+                    configValueInput.focus();
+                    return;
+                }
                 payload = JSON.stringify({
                     type: type,
                     value: value,
@@ -1220,7 +1229,8 @@
         async function refreshPolicies() {
             const policySelect = document.getElementById('rulePolicy');
             const policySourceInfo = document.getElementById('policySourceInfo');
-            const refreshBtn = event.target.closest('button');
+            // 安全地获取按钮（可能不是从点击事件触发的）
+            const refreshBtn = event && event.target ? event.target.closest('button') : null;
 
             // 禁用按钮并显示加载状态
             if (refreshBtn) {
@@ -1510,9 +1520,21 @@
          * 保存规则到配置
          */
         async function saveRulesToConfig() {
-            if (!currentEditingKey) {
-                showMessage('请先创建或编辑一个配置', 'error');
+            // 检查是否有规则
+            if (clashRules.length === 0) {
+                showMessage('请添加至少一条规则', 'error');
                 return;
+            }
+
+            // 如果没有 currentEditingKey，使用配置键输入框的值
+            let key = currentEditingKey;
+            if (!key) {
+                key = configKeyInput.value.trim();
+                if (!key) {
+                    showMessage('请输入配置键（在表单中填写）', 'error');
+                    configKeyInput.focus();
+                    return;
+                }
             }
 
             const payload = JSON.stringify({
@@ -1523,7 +1545,12 @@
                 comment: `Clash 规则配置 (${clashRules.length} 条)`
             });
 
-            await updateConfig(currentEditingKey, payload);
+            await updateConfig(key, payload);
+
+            // 如果是新增配置，保存成功后更新 currentEditingKey
+            if (!currentEditingKey) {
+                currentEditingKey = key;
+            }
         }
 
         /**
