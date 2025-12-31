@@ -934,7 +934,15 @@
                     displayValue = rawOrParsedValue.value !== undefined ? String(rawOrParsedValue.value) : JSON.stringify(rawOrParsedValue, null, 2);
                     displayComment = rawOrParsedValue.comment || '';
                     configType = rawOrParsedValue.type || 'common'; // 获取类型，默认为 common
-                    actualValueToEdit = rawOrParsedValue.value !== undefined ? String(rawOrParsedValue.value) : JSON.stringify(rawOrParsedValue);
+
+                    // 根据类型处理 actualValueToEdit
+                    if (configType === 'clash-yml' && typeof rawOrParsedValue.value === 'object') {
+                        // Clash YAML 类型：保持对象形式
+                        actualValueToEdit = rawOrParsedValue.value;
+                    } else {
+                        // 其他类型：转换为字符串
+                        actualValueToEdit = rawOrParsedValue.value !== undefined ? String(rawOrParsedValue.value) : JSON.stringify(rawOrParsedValue);
+                    }
                 } else {
                     // Worker 返回的是原始字符串
                     displayValue = String(rawOrParsedValue);
@@ -974,7 +982,7 @@
                     </td>
                     <td>
                         <div class="actions">
-                            <button class="btn btn-secondary btn-sm" onclick="editConfig('${key}', \`${escapeForTemplateLiteral(actualValueToEdit)}\`, \`${escapeForTemplateLiteral(displayComment)}\`, '${configType}')">编辑</button>
+                            <button class="btn btn-secondary btn-sm" onclick="editConfig('${key}', ${configType === 'clash-yml' ? JSON.stringify(actualValueToEdit) : `\`${escapeForTemplateLiteral(actualValueToEdit)}\`}, \`${escapeForTemplateLiteral(displayComment)}\`, '${configType}')">编辑</button>
                             <button class="btn btn-danger btn-sm" onclick="deleteConfig('${key}')">删除</button>
                         </div>
                     </td>
@@ -1047,11 +1055,19 @@
             if (type === 'clash-yml') {
                 // Clash YAML 类型：加载规则
                 valueGroup.style.display = 'none';
+                // value 可能是对象或 JSON 字符串
+                let rulesData = null;
                 if (typeof value === 'object' && value.rules) {
-                    clashRules = value.rules || [];
-                } else {
-                    clashRules = [];
+                    rulesData = value.rules;
+                } else if (typeof value === 'string') {
+                    try {
+                        const parsed = JSON.parse(value);
+                        rulesData = parsed.rules || [];
+                    } catch (e) {
+                        console.error('Failed to parse rules:', e);
+                    }
                 }
+                clashRules = rulesData || [];
                 openClashRulesEditor(key);
             } else {
                 // 其他类型：显示值输入框
