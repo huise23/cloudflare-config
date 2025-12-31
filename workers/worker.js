@@ -201,18 +201,22 @@ async function handleRequest(request, env) {
   // 3. 路由解析
   const pathParts = path.split('/').filter(p => p); // e.g., ['config', 'my-key', 'value']
 
+  if (pathParts.length === 0 || pathParts[0] !== 'api') {
+      return createResponse(requestOrigin, 'Not Found', 404);
+  }
+
   // 4. 代理 API 路由（优先处理）
-  if (pathParts[0] === 'api' && pathParts[1] === 'fetch-url') {
+  if (pathParts[1] === 'fetch-url') {
     return handleFetchUrl(request, requestOrigin);
   }
 
   // 5. 确保请求的是 /config 或 /config/*
-  if (pathParts.length === 0 || pathParts[0] !== 'config') {
+  if (pathParts[1] !== 'config') {
       return createResponse(requestOrigin, 'Not Found', 404);
   }
 
-  const configKey = pathParts[1]; // e.g., 'my-key'
-  const subPath = pathParts[2];   // e.g., 'value' for /config/my-key/value
+  const configKey = pathParts[2]; // e.g., 'my-key'
+  const subPath = pathParts[3];   // e.g., 'value' for /config/my-key/value
 
   try {
     switch (method) {
