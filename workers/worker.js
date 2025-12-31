@@ -1,11 +1,11 @@
 // --- 配置区 ---
 const ALLOWED_ORIGINS = [
   'https://config-ui.pages.dev',     // Cloudflare Pages 默认域名
-  'https://config-ui.your-domain.com', // 替换为您的自定义域名
+  'https://config-ui.52mn.ru', // 替换为您的自定义域名
   'http://localhost:3000',             // 本地开发
   'http://127.0.0.1:8080',             // 本地开发
 ];
-const AUTH_TOKEN = '8ti2zSqm6Hna7xf4jUh7pcWc'; // ⚠️ 部署前请替换为强密码！
+const AUTH_TOKEN = env.SECRET_TOKEN; // ⚠️ 部署前请替换为强密码！
 
 // --- 辅助函数：CORS 处理 ---
 
