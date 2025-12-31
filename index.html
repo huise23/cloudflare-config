@@ -477,6 +477,114 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+
+        /* --- Clash 规则编辑器样式 --- */
+        .rule-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            margin-bottom: 0.75rem;
+            transition: all 0.2s;
+        }
+
+        .rule-item:hover {
+            box-shadow: var(--shadow-sm);
+            border-color: var(--primary-color);
+        }
+
+        .rule-item.disabled {
+            opacity: 0.5;
+            background: var(--bg-secondary);
+        }
+
+        .rule-toggle {
+            display: flex;
+            align-items: center;
+        }
+
+        .rule-content {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+        }
+
+        .rule-type-tag {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            background: var(--primary-light);
+            color: #92400e;
+            white-space: nowrap;
+        }
+
+        .rule-type-DOMAIN-SUFFIX { background: var(--info-light); color: #155e75; }
+        .rule-type-DOMAIN { background: var(--success-light); color: #065f46; }
+        .rule-type-DOMAIN-KEYWORD { background: var(--warning-light); color: #92400e; }
+        .rule-type-IP-CIDR { background: var(--danger-light); color: #991b1b; }
+        .rule-type-GEOIP { background: var(--primary-light); color: #7c3aed; }
+        .rule-type-SRC-IP-CIDR { background: var(--bg-tertiary); color: #475569; }
+
+        .rule-value {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            flex: 1;
+            min-width: 150px;
+        }
+
+        .rule-arrow {
+            color: var(--text-muted);
+            font-size: 1.2rem;
+        }
+
+        .rule-policy {
+            font-weight: 600;
+            color: var(--primary-color);
+            padding: 0.25rem 0.5rem;
+            background: var(--primary-light);
+            border-radius: 4px;
+            font-size: 0.85rem;
+        }
+
+        .rule-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .clash-rule-form {
+            margin-bottom: 1.5rem;
+        }
+
+        /* 移动端优化 */
+        @media (max-width: 768px) {
+            .rule-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+
+            .rule-content {
+                width: 100%;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.5rem;
+            }
+
+            .rule-actions {
+                width: 100%;
+                justify-content: flex-end;
+            }
+        }
     </style>
 </head>
 <body>
@@ -531,6 +639,9 @@
         <!-- Clash 规则编辑器 (默认隐藏) -->
         <div id="clashRulesEditor" class="form-section" style="display: none;">
             <h3>🎯 Clash 规则快速添加</h3>
+            <div style="background: var(--info-light); padding: 0.75rem; border-radius: var(--radius-sm); margin-bottom: 1rem; font-size: 0.9rem; color: #155e75;">
+                💡 <strong>使用提示</strong>：选择规则类型 → 输入规则内容 → 选择代理策略 → 点击"添加规则"。完成后点击"保存到配置"。
+            </div>
             <div class="clash-rule-form">
                 <div class="form-group">
                     <label for="ruleType">规则类型</label>
@@ -555,11 +666,13 @@
                             <option value="Direct">Direct</option>
                             <option value="Reject">Reject</option>
                         </select>
-                        <button type="button" class="btn btn-secondary btn-sm" onclick="refreshPolicies()" title="刷新策略列表">
-                            🔄
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="refreshPolicies()" title="从 clash-github-url 配置加载策略列表">
+                            🔄 刷新策略
                         </button>
                     </div>
-                    <small style="color: var(--text-muted); margin-top: 0.25rem; display: block;" id="policySourceInfo"></small>
+                    <small style="color: var(--text-muted); margin-top: 0.25rem; display: block;" id="policySourceInfo">
+                        💡 提示：创建一个 clash-github-url 类型的配置，然后点击"刷新策略"按钮自动加载代理策略
+                    </small>
                 </div>
                 <div style="margin-top: 1rem;">
                     <button type="button" class="btn btn-primary" onclick="addRule()">+ 添加规则</button>
@@ -633,9 +746,8 @@
                 // 延迟显示，等待表单可见
                 setTimeout(() => {
                     const key = configKeyInput.value.trim();
-                    if (key || isEditing) {
-                        openClashRulesEditor(isEditing ? key : null);
-                    }
+                    // 无论是否已输入 key，都显示规则编辑器
+                    openClashRulesEditor(isEditing ? key : null);
                 }, 100);
             } else if (selectedType === 'clash-github-url') {
                 // Clash URL 类型：显示值输入框，隐藏规则编辑器
@@ -1051,7 +1163,8 @@
             }
 
             const encodedUrl = encodeURIComponent(urlString);
-            const apiUrl = `${WORKER_URL}/../api/fetch-url?url=${encodedUrl}`;
+            // 修正 API 路径：直接使用 /api/fetch-url
+            const apiUrl = `/api/fetch-url?url=${encodedUrl}`;
 
             const response = await fetch(apiUrl, {
                 headers: {
@@ -1096,11 +1209,21 @@
         async function refreshPolicies() {
             const policySelect = document.getElementById('rulePolicy');
             const policySourceInfo = document.getElementById('policySourceInfo');
+            const refreshBtn = event.target.closest('button');
 
-            // 查找 clash-github-url 类型的配置
+            // 禁用按钮并显示加载状态
+            if (refreshBtn) {
+                refreshBtn.disabled = true;
+                refreshBtn.textContent = '⏳ 加载中...';
+            }
+
             try {
+                // 查找 clash-github-url 类型的配置
                 const responseText = await makeRequest('GET');
-                if (!responseText) return;
+                if (!responseText) {
+                    policySourceInfo.textContent = '❌ 无法加载配置列表';
+                    return;
+                }
 
                 const configs = JSON.parse(responseText);
                 const urlConfigs = configs.filter(c => {
@@ -1114,17 +1237,35 @@
                     const url = config.value.value;
                     const policies = await loadPoliciesFromRemote(url);
 
+                    // 保存当前选中的策略
+                    const currentPolicy = policySelect.value;
+
                     // 更新下拉选项
                     policySelect.innerHTML = policies.map(p =>
                         `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`
                     ).join('');
 
-                    policySourceInfo.textContent = `从 ${config.key} 加载`;
+                    // 尝试恢复之前选中的策略
+                    if (policies.includes(currentPolicy)) {
+                        policySelect.value = currentPolicy;
+                    }
+
+                    policySourceInfo.textContent = `✅ 从 "${config.key}" 加载了 ${policies.length} 个策略`;
+                    policySourceInfo.style.color = 'var(--success-color)';
                 } else {
-                    policySourceInfo.textContent = '未找到远程配置，使用默认策略';
+                    policySourceInfo.textContent = '⚠️ 未找到 clash-github-url 类型的配置，请先创建一个远程配置';
+                    policySourceInfo.style.color = 'var(--warning-color)';
                 }
             } catch (error) {
                 console.error('刷新策略失败:', error);
+                policySourceInfo.textContent = `❌ 刷新失败: ${error.message}`;
+                policySourceInfo.style.color = 'var(--danger-color)';
+            } finally {
+                // 恢复按钮状态
+                if (refreshBtn) {
+                    refreshBtn.disabled = false;
+                    refreshBtn.textContent = '🔄 刷新策略';
+                }
             }
         }
 

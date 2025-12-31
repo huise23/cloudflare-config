@@ -253,7 +253,10 @@ async function handleRequest(request, env) {
           const allConfigs = [];
           for (const key of list.keys) {
             const { rawValue, parsedValue } = await getRawAndParsedConfig(env.CONFIG_KV, key.name);
-            allConfigs.push({ key: key.name, value: parsedValue || rawValue }); // 返回解析后的对象或原始字符串
+            // 过滤掉已删除的 key（rawValue 为 null 表示 key 不存在）
+            if (rawValue !== null) {
+              allConfigs.push({ key: key.name, value: parsedValue || rawValue }); // 返回解析后的对象或原始字符串
+            }
           }
           return createResponse(requestOrigin, JSON.stringify(allConfigs), 200, 'application/json');
         }
