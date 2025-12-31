@@ -53,12 +53,30 @@ function handlePreflight(requestOrigin) {
 
 /**
  * 检查请求是否包含有效的认证令牌。
+ * 支持 Authorization header 和 URL 参数两种方式。
+ * @param {KVNamespace} env - 环境变量。
  * @param {Request} request - 传入的请求对象。
+ * @param {URL} urlObj - 请求的 URL 对象。
  * @returns {boolean} 如果认证有效则返回true，否则返回false。
  */
-function isAuthenticated(env,request) {
+function isAuthenticated(env, request, urlObj) {
+  // 优先检查 Authorization header
   const authHeader = request.headers.get('Authorization');
-  return authHeader === `Bearer ${env.SECRET_TOKEN}`;
+  if (authHeader === `Bearer ${env.SECRET_TOKEN}`) {
+    return true;
+  }
+
+  // 如果 header 中没有，检查 URL 参数 ?SECRET_TOKEN=xxx
+  try {
+    const tokenParam = urlObj.searchParams.get('SECRET_TOKEN');
+    if (tokenParam === env.SECRET_TOKEN) {
+      return true;
+    }
+  } catch (e) {
+    // URL 参数解析失败，忽略
+  }
+
+  return false;
 }
 
 // --- KV 操作方法 ---
@@ -194,7 +212,7 @@ async function handleRequest(request, env) {
   }
 
   // 2. 认证检查（所有 API 都需要认证）
-  if (!isAuthenticated(env,request)) {
+  if (!isAuthenticated(env, request, url)) {
     return createResponse(requestOrigin, 'Unauthorized', 401);
   }
 

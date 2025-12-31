@@ -640,12 +640,12 @@
         <div id="clashRulesEditor" class="form-section" style="display: none;">
             <h3>🎯 Clash 规则快速添加</h3>
             <div style="background: var(--info-light); padding: 0.75rem; border-radius: var(--radius-sm); margin-bottom: 1rem; font-size: 0.9rem; color: #155e75;">
-                💡 <strong>使用提示</strong>：选择规则类型 → 输入规则内容 → 选择代理策略 → 点击"添加规则"。完成后点击"保存到配置"。
+                💡 <strong>使用提示</strong>：选择规则类型 → 输入规则内容（支持多行批量添加）→ 选择代理策略 → 点击"添加规则"。完成后点击"保存到配置"。
             </div>
             <div class="clash-rule-form">
                 <div class="form-group">
                     <label for="ruleType">规则类型</label>
-                    <select id="ruleType">
+                    <select id="ruleType" onchange="updateRulePlaceholder()">
                         <option value="DOMAIN-SUFFIX">DOMAIN-SUFFIX (域名后缀)</option>
                         <option value="DOMAIN">DOMAIN (精确域名)</option>
                         <option value="DOMAIN-KEYWORD">DOMAIN-KEYWORD (域名关键字)</option>
@@ -655,8 +655,16 @@
                     </select>
                 </div>
                 <div class="form-group">
-                    <label for="ruleValue">规则内容</label>
-                    <input type="text" id="ruleValue" placeholder="例如: google.com 或 192.168.1.0/24">
+                    <label for="ruleValue">
+                        规则内容
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="fillRuleExample()" style="margin-left: 0.5rem; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                            📝 填充示例
+                        </button>
+                    </label>
+                    <textarea id="ruleValue" rows="4" placeholder="例如: google.com 或 192.168.1.0/24&#10;&#10;💡 支持多行输入，每行自动生成一条规则"></textarea>
+                    <small style="color: var(--text-muted); margin-top: 0.25rem; display: block;">
+                        💡 <strong>批量添加</strong>：每行输入一个规则内容，自动生成多条规则
+                    </small>
                 </div>
                 <div class="form-group">
                     <label for="rulePolicy">代理策略</label>
@@ -769,6 +777,9 @@
                 authTokenInput.value = savedToken;
                 fetchConfigList();
             }
+
+            // 初始化规则输入框占位符
+            updateRulePlaceholder();
         });
 
         authTokenInput.addEventListener('change', () => {
@@ -1270,11 +1281,94 @@
         }
 
         /**
+         * 根据规则类型更新输入框占位符
+         */
+        function updateRulePlaceholder() {
+            const ruleType = document.getElementById('ruleType').value;
+            const ruleValueInput = document.getElementById('ruleValue');
+
+            const placeholders = {
+                'DOMAIN-SUFFIX': 'google.com\nyoutube.com\ngmail.com',
+                'DOMAIN': 'www.google.com\napi.github.com',
+                'DOMAIN-KEYWORD': 'google\nfacebook\ntwitter',
+                'IP-CIDR': '192.168.1.0/24\n10.0.0.0/8',
+                'GEOIP': 'CN\nUS\nJP\nHK',
+                'SRC-IP-CIDR': '192.168.1.0/24\n10.0.0.0/8'
+            };
+
+            ruleValueInput.placeholder = placeholders[ruleType] || '输入规则内容';
+        }
+
+        /**
+         * 填充规则示例
+         */
+        function fillRuleExample() {
+            const ruleType = document.getElementById('ruleType').value;
+            const ruleValueInput = document.getElementById('ruleValue');
+
+            let examples = [];
+
+            switch (ruleType) {
+                case 'DOMAIN-SUFFIX':
+                    examples = [
+                        'google.com',
+                        'googleapis.com',
+                        'googleusercontent.com',
+                        'youtube.com',
+                        'gmail.com'
+                    ];
+                    break;
+                case 'DOMAIN':
+                    examples = [
+                        'www.google.com',
+                        'api.github.com',
+                        'cdn.jsdelivr.net'
+                    ];
+                    break;
+                case 'DOMAIN-KEYWORD':
+                    examples = [
+                        'google',
+                        'facebook',
+                        'youtube',
+                        'twitter'
+                    ];
+                    break;
+                case 'IP-CIDR':
+                    examples = [
+                        '192.168.1.0/24',
+                        '10.0.0.0/8',
+                        '172.16.0.0/12'
+                    ];
+                    break;
+                case 'GEOIP':
+                    examples = [
+                        'CN',
+                        'US',
+                        'JP',
+                        'HK'
+                    ];
+                    break;
+                case 'SRC-IP-CIDR':
+                    examples = [
+                        '192.168.1.0/24',
+                        '10.0.0.0/8'
+                    ];
+                    break;
+                default:
+                    examples = ['example.com'];
+            }
+
+            ruleValueInput.value = examples.join('\n');
+            showMessage('已填充示例，点击"添加规则"批量添加', 'info');
+        }
+
+        /**
          * 添加规则到列表
          */
         function addRule() {
             const ruleType = document.getElementById('ruleType').value;
-            const ruleValue = document.getElementById('ruleValue').value.trim();
+            const ruleValueInput = document.getElementById('ruleValue');
+            const ruleValue = ruleValueInput.value.trim();
             const rulePolicy = document.getElementById('rulePolicy').value;
 
             if (!ruleValue) {
@@ -1282,19 +1376,41 @@
                 return;
             }
 
-            clashRules.push({
-                type: ruleType,
-                value: ruleValue,
-                policy: rulePolicy,
-                enabled: true
+            // 支持多行输入：按行分割，过滤空行
+            const lines = ruleValue
+                .split('\n')
+                .map(line => line.trim())
+                .filter(line => line.length > 0);
+
+            if (lines.length === 0) {
+                showMessage('请输入有效的规则内容', 'error');
+                return;
+            }
+
+            // 批量添加规则
+            let addedCount = 0;
+            lines.forEach(line => {
+                clashRules.push({
+                    type: ruleType,
+                    value: line,
+                    policy: rulePolicy,
+                    enabled: true
+                });
+                addedCount++;
             });
 
             // 清空输入框
-            document.getElementById('ruleValue').value = '';
+            ruleValueInput.value = '';
 
             // 重新渲染列表
             renderRulesList();
-            showMessage('规则已添加', 'success');
+
+            // 显示添加结果
+            if (addedCount > 1) {
+                showMessage(`成功添加 ${addedCount} 条规则`, 'success');
+            } else {
+                showMessage('规则已添加', 'success');
+            }
         }
 
         /**
