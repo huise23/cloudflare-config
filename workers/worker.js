@@ -5,7 +5,6 @@ const ALLOWED_ORIGINS = [
   'http://localhost:3000',             // 本地开发
   'http://127.0.0.1:8080',             // 本地开发
 ];
-const AUTH_TOKEN = env.SECRET_TOKEN; // ⚠️ 部署前请替换为强密码！
 
 // --- 辅助函数：CORS 处理 ---
 
@@ -57,9 +56,9 @@ function handlePreflight(requestOrigin) {
  * @param {Request} request - 传入的请求对象。
  * @returns {boolean} 如果认证有效则返回true，否则返回false。
  */
-function isAuthenticated(request) {
+function isAuthenticated(env,request) {
   const authHeader = request.headers.get('Authorization');
-  return authHeader === `Bearer ${AUTH_TOKEN}`;
+  return authHeader === `Bearer ${env.SECRET_TOKEN}`;
 }
 
 // --- KV 操作方法 ---
@@ -195,7 +194,7 @@ async function handleRequest(request, env) {
   }
 
   // 2. 认证检查（所有 API 都需要认证）
-  if (!isAuthenticated(request)) {
+  if (!isAuthenticated(env,request)) {
     return createResponse(requestOrigin, 'Unauthorized', 401);
   }
 
