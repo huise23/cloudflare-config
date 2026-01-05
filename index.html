@@ -798,6 +798,13 @@
             configKeyInput.disabled = false;
             configTypeInput.disabled = false;
             configFormContainer.style.display = 'block';
+
+            // 确保 valueGroup 正确显示
+            const valueGroup = document.getElementById('valueGroup');
+            valueGroup.style.display = 'block';
+            configValueInput.placeholder = '根据类型不同，此字段用途也不同';
+            closeClashRulesEditor();
+
             configKeyInput.focus();
         });
 
@@ -1284,20 +1291,24 @@
                     const url = config.value.value;
                     const policies = await loadPoliciesFromRemote(url);
 
+                    // 添加默认策略（确保基础策略始终存在）
+                    const defaultPolicies = ['Direct', 'Proxy', 'Reject'];
+                    const allPolicies = [...new Set([...defaultPolicies, ...policies])];
+
                     // 保存当前选中的策略
                     const currentPolicy = policySelect.value;
 
                     // 更新下拉选项
-                    policySelect.innerHTML = policies.map(p =>
+                    policySelect.innerHTML = allPolicies.map(p =>
                         `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`
                     ).join('');
 
                     // 尝试恢复之前选中的策略
-                    if (policies.includes(currentPolicy)) {
+                    if (allPolicies.includes(currentPolicy)) {
                         policySelect.value = currentPolicy;
                     }
 
-                    policySourceInfo.textContent = `✅ 从 "${config.key}" 加载了 ${policies.length} 个策略`;
+                    policySourceInfo.textContent = `✅ 从 "${config.key}" 加载了 ${policies.length} 个策略（含默认策略）`;
                     policySourceInfo.style.color = 'var(--success-color)';
                 } else {
                     policySourceInfo.textContent = '⚠️ 未找到 clash-github-url 类型的配置，请先创建一个远程配置';

@@ -152,6 +152,98 @@ function formatClashRulesToYAML(configValue) {
   return "+rules:\n  - 'DOMAIN-SUFFIX,test.com,DIRECT'";
 }
 
+/**
+ * 处理增量追加规则
+ * 第三方直接调用此接口，传入规则字符串，API ���动追加到现有配置中
+ * @param {object} env - 环境变量
+ * @param {Request} request - 请求对象
+ * @param {string} requestOrigin - 请求来源
+ * @param {string} configKey - 配置键
+ * @returns {Response}
+ */
+async function handleAppendRule(env, request, requestOrigin, configKey) {
+  try {
+    // 获取请求体（规则字符串）
+    const ruleString = await request.text();
+
+    if (!ruleString || ruleString.trim() === '') {
+      return createResponse(requestOrigin, 'Rule string is required', 400);
+    }
+
+    // 解析规则字符串：TYPE,value,policy
+    // 支持格式：DOMAIN-SUFFIX,kyland.com,"🐬 自定义直连"
+    const parts = ruleString.split(',').map(p => p.trim());
+
+    if (parts.length < 3) {
+      return createResponse(requestOrigin, 'Invalid rule format. Expected: TYPE,value,policy', 400);
+    }
+
+    // 提取类型、值和策略
+    const type = parts[0].trim().toUpperCase();
+    // 重新组合中间部分（可能包含逗号的策略名称）
+    const value = parts.slice(1, parts.length - 1).join(',').trim();
+    const policy = parts[parts.length - 1].trim();
+
+    // 验证类型
+    const validTypes = ['DOMAIN-SUFFIX', 'DOMAIN', 'DOMAIN-KEYWORD', 'IP-CIDR', 'GEOIP', 'SRC-IP-CIDR'];
+    if (!validTypes.includes(type)) {
+      return createResponse(requestOrigin, `Invalid rule type: ${type}`, 400);
+    }
+
+    // 获取现有配置
+    const { rawValue, parsedValue } = await getRawAndParsedConfig(env.CONFIG_KV, configKey);
+
+    if (rawValue === null) {
+      return createResponse(requestOrigin, `Config '${configKey}' not found`, 404);
+    }
+
+    // 检查配置类型是否为 clash-yml
+    let configData;
+    if (parsedValue && typeof parsedValue === 'object') {
+      if (parsedValue.type === 'clash-yml') {
+        configData = parsedValue;
+      } else if (parsedValue.value && parsedValue.value.type === 'clash-yml') {
+        configData = parsedValue.value;
+      } else {
+        return createResponse(requestOrigin, `Config '${configKey}' is not a clash-yml type`, 400);
+      }
+    } else {
+      return createResponse(requestOrigin, `Config '${configKey}' is not a valid clash-yml config`, 400);
+    }
+
+    // 获取或初始化规则数组
+    let rules = [];
+    if (configData.value && configData.value.rules && Array.isArray(configData.value.rules)) {
+      rules = configData.value.rules;
+    }
+
+    // 追加新规则
+    rules.push({
+      type: type,
+      value: value,
+      policy: policy,
+      enabled: true
+    });
+
+    // 更新配置
+    const updatedConfig = {
+      type: 'clash-yml',
+      value: {
+        rules: rules
+      },
+      comment: configData.comment || `Clash 规则配置 (${rules.length} 条)`
+    };
+
+    await putConfig(env.CONFIG_KV, configKey, JSON.stringify(updatedConfig));
+
+    return createResponse(requestOrigin, 'Rule appended successfully', 200);
+
+  } catch (error) {
+    console.error('Append rule error:', error);
+    return createResponse(requestOrigin, `Internal Server Error: ${error.message}`, 500);
+  }
+}
+
 // --- 代理 API 处理 ---
 
 /**
@@ -327,9 +419,20 @@ async function handleRequest(request, env) {
       case 'POST':
       case 'PUT':
         if (!configKey) return createResponse(requestOrigin, 'Config key is required', 400);
-        const body = await request.text();
-        await putConfig(env.CONFIG_KV, configKey, body);
-        return createResponse(requestOrigin, `Config '${configKey}' updated successfully`, 200);
+
+        // 检查是否为增量追加操作
+        const actionParam = url.searchParams.get('action');
+
+        if (actionParam === 'append') {
+          // 增量追加规则
+          return await handleAppendRule(env, request, requestOrigin, configKey);
+        } else {
+          // 普通更新配置
+          const body = await request.text();
+          await putConfig(env.CONFIG_KV, configKey, body);
+          return createResponse(requestOrigin, `Config '${configKey}' updated successfully`, 200);
+        }
+        break;
 
       case 'DELETE':
         if (!configKey) return createResponse(requestOrigin, 'Config key is required', 400);
