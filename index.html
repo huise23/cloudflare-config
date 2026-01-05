@@ -982,11 +982,21 @@
                     </td>
                     <td>
                         <div class="actions">
-                            <button class="btn btn-secondary btn-sm" onclick="editConfig('${key}', ${configType === 'clash-yml' ? JSON.stringify(actualValueToEdit) : `\`${escapeForTemplateLiteral(actualValueToEdit)}\`}, \`${escapeForTemplateLiteral(displayComment)}\`, '${configType}')">编辑</button>
+                            <button class="btn btn-secondary btn-sm edit-btn" data-key="${escapeHtml(key)}" data-type="${configType}">编辑</button>
                             <button class="btn btn-danger btn-sm" onclick="deleteConfig('${key}')">删除</button>
                         </div>
                     </td>
                 `;
+
+                // 使用 data 属性存储配置数据（更安全）
+                const editBtn = row.querySelector('.edit-btn');
+                editBtn.dataset.value = configType === 'clash-yml' ? JSON.stringify(actualValueToEdit) : actualValueToEdit;
+                editBtn.dataset.comment = displayComment;
+                editBtn.addEventListener('click', function() {
+                    const value = this.dataset.value;
+                    const parsedValue = configType === 'clash-yml' ? JSON.parse(value) : value;
+                    editConfig(this.dataset.key, parsedValue, this.dataset.comment, this.dataset.type);
+                });
                 configListBody.appendChild(row);
             });
         }
