@@ -121,6 +121,37 @@ async function deleteConfig(kvNamespace, key) {
   await kvNamespace.delete(key);
 }
 
+/**
+ * 将 clash-yml 配置转换为 YAML 格式
+ * @param {object} configValue - clash-yml 配置对象 {rules: [...]}
+ * @returns {string} YAML 格式的规则字符串
+ */
+function formatClashRulesToYAML(configValue) {
+  // 如果有 rules 数组，转换成 YAML
+  if (configValue && configValue.rules && Array.isArray(configValue.rules)) {
+    // 过滤出启用的规则
+    const enabledRules = configValue.rules.filter(rule => rule.enabled !== false);
+
+    if (enabledRules.length === 0) {
+      // 如果没有启用的规则，返回默认示例
+      return "+rules:\n  - 'DOMAIN-SUFFIX,test.com,DIRECT'";
+    }
+
+    // 生成 YAML 格式
+    const yamlLines = enabledRules.map(rule => {
+      const type = (rule.type || 'DOMAIN-SUFFIX').toUpperCase();
+      const value = rule.value || '';
+      const policy = rule.policy || 'DIRECT';
+      return `  - '${type},${value},${policy}'`;
+    });
+
+    return "+rules:\n" + yamlLines.join('\n');
+  }
+
+  // 如果格式不对，返回默认示例
+  return "+rules:\n  - 'DOMAIN-SUFFIX,test.com,DIRECT'";
+}
+
 // --- 代理 API 处理 ---
 
 /**
@@ -257,8 +288,22 @@ async function handleRequest(request, env) {
             }
           } else {
             // 请求 /config/my-key (不带 /value)
-            if (parsedValue) {
-              // 如果是有效的JSON，返回整个JSON对象
+            // 检查 Accept header 来决定返回格式
+            const acceptHeader = request.headers.get('Accept') || '';
+
+            if (parsedValue && typeof parsedValue === 'object') {
+              // 检查是否为 clash-yml 类型，且请求方不接受 JSON
+              const isClashYml = parsedValue.type === 'clash-yml' || parsedValue.value?.type === 'clash-yml';
+              const wantsYaml = !acceptHeader.includes('application/json');
+
+              if (isClashYml && wantsYaml) {
+                // clash-yml 类型且请求方不接受 JSON，返回 YAML 格式
+                const configValue = parsedValue.value || parsedValue;
+                const yamlContent = formatClashRulesToYAML(configValue);
+                return createResponse(requestOrigin, yamlContent, 200, 'text/plain; charset=utf-8');
+              }
+
+              // 其他情况返回 JSON（前端配置页面）
               return createResponse(requestOrigin, JSON.stringify(parsedValue), 200, 'application/json');
             } else {
               // 如果不是有效的JSON，返回原始字符串
