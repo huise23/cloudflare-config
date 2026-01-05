@@ -231,7 +231,7 @@ async function handleAppendRule(env, request, requestOrigin, configKey) {
       value: {
         rules: rules
       },
-      comment: configData.comment || `Clash 规则配置 (${rules.length} 条)`
+      comment: `Clash 规则配置 (${rules.length} 条)`
     };
 
     await putConfig(env.CONFIG_KV, configKey, JSON.stringify(updatedConfig));
