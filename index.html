@@ -670,9 +670,8 @@
                     <label for="rulePolicy">代理策略</label>
                     <div style="display: flex; gap: 0.5rem; align-items: center;">
                         <select id="rulePolicy" style="flex: 1;">
-                            <option value="Proxy">Proxy</option>
-                            <option value="Direct">Direct</option>
-                            <option value="Reject">Reject</option>
+                            <option value="DIRECT">DIRECT</option>
+                            <option value="REJECT">REJECT</option>
                         </select>
                         <button type="button" class="btn btn-secondary btn-sm" onclick="refreshPolicies()" title="从 clash-github-url 配置加载策略列表">
                             🔄 刷新策略
@@ -1151,7 +1150,7 @@
                 }
             }
 
-            return policies.length > 0 ? policies : ['Proxy', 'Direct', 'Reject'];
+            return policies.length > 0 ? policies : ['DIRECT', 'REJECT'];
         }
 
         /**
@@ -1245,7 +1244,7 @@
                 return policies;
             } catch (error) {
                 showMessage(`加载策略失败: ${error.message}`, 'error');
-                return ['Proxy', 'Direct', 'Reject']; // 返回默认策略
+                return ['DIRECT', 'REJECT']; // 返回默认策略
             }
         }
 
@@ -1291,7 +1290,7 @@
                     const policies = await loadPoliciesFromRemote(url);
 
                     // 添加默认策略（确保基础策略始终存在）
-                    const defaultPolicies = ['Direct', 'Proxy', 'Reject'];
+                    const defaultPolicies = ['DIRECT', 'REJECT'];
                     const allPolicies = [...new Set([...defaultPolicies, ...policies])];
 
                     // 保存当前选中的策略
