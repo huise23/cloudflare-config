@@ -1305,7 +1305,14 @@
                 // 提取 name
                 const nameMatch = line.match(/^\s*-\s*name:\s*(.+)$/);
                 if (nameMatch) {
-                    policies.push(nameMatch[1].trim());
+                    // 去除可能的引号包围
+                    let policyName = nameMatch[1].trim();
+                    // 移除开头和结尾的单引号或双引号
+                    if ((policyName.startsWith('"') && policyName.endsWith('"')) ||
+                        (policyName.startsWith("'") && policyName.endsWith("'"))) {
+                        policyName = policyName.slice(1, -1);
+                    }
+                    policies.push(policyName);
                 }
             }
 
