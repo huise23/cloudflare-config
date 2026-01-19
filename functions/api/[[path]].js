@@ -6,6 +6,49 @@ const ALLOWED_ORIGINS = [
   'http://127.0.0.1:8080',             // 本地开发
 ];
 
+// --- 辅助函数 ---
+
+/**
+ * Clash 规则去重工具函数 (Last Write Wins)
+ * @param {Object} newRule - 新规则 {type, value, policy, enabled}
+ * @param {Array} existingRules - 现有规则数组
+ * @returns {Array} 去重后的规则数组
+ */
+function deduplicateClashRule(newRule, existingRules) {
+    // 查找是否存在相同 type+value 的规则
+    const duplicateIndex = existingRules.findIndex(
+        rule => rule.type === newRule.type && rule.value === newRule.value
+    );
+
+    if (duplicateIndex !== -1) {
+        // 存在重复，创建新数组并替换旧规则
+        const newRules = [...existingRules];
+        newRules[duplicateIndex] = newRule;
+        return newRules;
+    } else {
+        // 不存在重复，追加新规则
+        return [...existingRules, newRule];
+    }
+}
+
+/**
+ * 对规则数组进行批量去重 (Last Write Wins)
+ * 用于 PUT 请求时清理整个规则数组
+ * @param {Array} rules - 可能包含重复的规则数组
+ * @returns {Array} 去重后的规则数组
+ */
+function deduplicateClashRulesArray(rules) {
+    const ruleMap = new Map(); // key: "type:value", value: rule
+
+    for (const rule of rules) {
+        const key = `${rule.type}:${rule.value}`;
+        // 后添加的规则覆盖前面的规则
+        ruleMap.set(key, rule);
+    }
+
+    return Array.from(ruleMap.values());
+}
+
 // --- 辅助函数：CORS 处理 ---
 
 /**
@@ -217,13 +260,16 @@ async function handleAppendRule(env, request, requestOrigin, configKey) {
       rules = configData.value.rules;
     }
 
-    // 追加新规则
-    rules.push({
+    // 创建新规则对象
+    const newRule = {
       type: type,
       value: value,
       policy: policy,
       enabled: true
-    });
+    };
+
+    // 使用去重工具函数 (Last Write Wins)
+    rules = deduplicateClashRule(newRule, rules);
 
     // 更新配置
     const updatedConfig = {
@@ -236,7 +282,7 @@ async function handleAppendRule(env, request, requestOrigin, configKey) {
 
     await putConfig(env.CONFIG_KV, configKey, JSON.stringify(updatedConfig));
 
-    return createResponse(requestOrigin, 'Rule appended successfully', 200);
+    return createResponse(requestOrigin, 'Rule appended successfully (duplicates removed)', 200);
 
   } catch (error) {
     console.error('Append rule error:', error);
@@ -429,8 +475,55 @@ async function handleRequest(request, env) {
         } else {
           // 普通更新配置
           const body = await request.text();
-          await putConfig(env.CONFIG_KV, configKey, body);
-          return createResponse(requestOrigin, `Config '${configKey}' updated successfully`, 200);
+
+          // 如果是 clash-yml 类型,对规则数组进行去重
+          try {
+            const parsedBody = JSON.parse(body);
+
+            // 检查是否为 clash-yml 类型且包含规则数组
+            const isClashYml = parsedBody.type === 'clash-yml' ||
+                              (parsedBody.value && parsedBody.value.type === 'clash-yml');
+
+            let rulesArray = null;
+            if (isClashYml) {
+              if (parsedBody.value && parsedBody.value.rules && Array.isArray(parsedBody.value.rules)) {
+                rulesArray = parsedBody.value.rules;
+              } else if (parsedBody.value && parsedBody.value.value && parsedBody.value.value.rules && Array.isArray(parsedBody.value.value.rules)) {
+                rulesArray = parsedBody.value.value.rules;
+              }
+            }
+
+            // 如果找到规则数组,进行去重
+            if (rulesArray) {
+              const originalLength = rulesArray.length;
+              const deduplicatedRules = deduplicateClashRulesArray(rulesArray);
+              const duplicateCount = originalLength - deduplicatedRules.length;
+
+              // 更新规则数组
+              if (parsedBody.value && parsedBody.value.rules && Array.isArray(parsedBody.value.rules)) {
+                parsedBody.value.rules = deduplicatedRules;
+              } else if (parsedBody.value && parsedBody.value.value && parsedBody.value.value.rules && Array.isArray(parsedBody.value.value.rules)) {
+                parsedBody.value.value.rules = deduplicatedRules;
+              }
+
+              // 保存去重后的配置
+              await putConfig(env.CONFIG_KV, configKey, JSON.stringify(parsedBody));
+
+              const msg = duplicateCount > 0
+                ? `Config '${configKey}' updated successfully (removed ${duplicateCount} duplicate rules)`
+                : `Config '${configKey}' updated successfully`;
+
+              return createResponse(requestOrigin, msg, 200);
+            } else {
+              // 不是 clash-yml 或没有规则数组,直接保存
+              await putConfig(env.CONFIG_KV, configKey, body);
+              return createResponse(requestOrigin, `Config '${configKey}' updated successfully`, 200);
+            }
+          } catch (parseError) {
+            // JSON 解析失败,保存原始文本
+            await putConfig(env.CONFIG_KV, configKey, body);
+            return createResponse(requestOrigin, `Config '${configKey}' updated successfully`, 200);
+          }
         }
         break;
 

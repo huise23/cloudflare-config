@@ -1574,6 +1574,37 @@
         }
 
         /**
+         * Clash 规则去重工具函数 (Last Write Wins)
+         * @param {Object} newRule - 新规则 {type, value, policy, enabled}
+         * @param {Array} existingRules - 现有规则数组
+         * @returns {Object} { rules: Array, duplicated: boolean, overwrittenIndex: number|null }
+         */
+        function deduplicateClashRule(newRule, existingRules) {
+            // 查找是否存在相同 type+value 的规则
+            const duplicateIndex = existingRules.findIndex(
+                rule => rule.type === newRule.type && rule.value === newRule.value
+            );
+
+            if (duplicateIndex !== -1) {
+                // 存在重复，覆盖旧规则
+                const newRules = [...existingRules];
+                newRules[duplicateIndex] = newRule;
+                return {
+                    rules: newRules,
+                    duplicated: true,
+                    overwrittenIndex: duplicateIndex
+                };
+            } else {
+                // 不存在重复，追加新规则
+                return {
+                    rules: [...existingRules, newRule],
+                    duplicated: false,
+                    overwrittenIndex: null
+                };
+            }
+        }
+
+        /**
          * 添加规则到列表
          */
         function addRule() {
@@ -1598,16 +1629,26 @@
                 return;
             }
 
-            // 批量添加规则
+            // 批量添加规则（带去重）
             let addedCount = 0;
+            let duplicatedCount = 0;
+
             lines.forEach(line => {
-                clashRules.push({
+                const newRule = {
                     type: ruleType,
                     value: line,
                     policy: rulePolicy,
                     enabled: true
-                });
-                addedCount++;
+                };
+
+                const result = deduplicateClashRule(newRule, clashRules);
+                clashRules = result.rules;
+
+                if (result.duplicated) {
+                    duplicatedCount++;
+                } else {
+                    addedCount++;
+                }
             });
 
             // 清空输入框
@@ -1617,7 +1658,11 @@
             renderRulesList();
 
             // 显示添加结果
-            if (addedCount > 1) {
+            if (duplicatedCount > 0 && addedCount === 0) {
+                showMessage(`已覆盖 ${duplicatedCount} 条重复规则`, 'info');
+            } else if (duplicatedCount > 0 && addedCount > 0) {
+                showMessage(`添加 ${addedCount} 条新规则，已覆盖 ${duplicatedCount} 条重复规则`, 'info');
+            } else if (addedCount > 1) {
                 showMessage(`成功添加 ${addedCount} 条规则`, 'success');
             } else {
                 showMessage('规则已添加', 'success');
