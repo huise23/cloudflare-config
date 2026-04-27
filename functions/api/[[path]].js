@@ -350,15 +350,18 @@ async function handleFetchUrl(request, requestOrigin) {
         response.status);
     }
 
-    const text = await response.text();
-
-    // 限制响应大小（最大 5MB）
-    if (text.length > 5 * 1024 * 1024) {
-      return createResponse(requestOrigin, 'Response too large (max 5MB)', 413);
+    // 流式透传上游内容，避免大文件被本地响应体大小限制拦截
+    const headers = getCorsHeaders(requestOrigin);
+    headers.set('Content-Type', response.headers.get('Content-Type') || 'text/plain; charset=utf-8');
+    const cacheControl = response.headers.get('Cache-Control');
+    if (cacheControl) {
+      headers.set('Cache-Control', cacheControl);
     }
 
-    // 返回原始内容
-    return createResponse(requestOrigin, text, 200, 'text/plain; charset=utf-8');
+    return new Response(response.body, {
+      status: response.status,
+      headers
+    });
   } catch (error) {
     if (error.name === 'AbortError') {
       return createResponse(requestOrigin, 'Request timeout (10s)', 504);

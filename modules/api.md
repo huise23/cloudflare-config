@@ -193,7 +193,6 @@ Authorization: Bearer {SECRET_TOKEN}
 - **状态码 400**: 缺少 URL 参数或格式错误
 - **状态码 403**: 域名不在白名单中
 - **状态码 504**: 请求超时（10秒）
-- **状态码 413**: 响应过大（超过 5MB）
 
 ---
 
@@ -337,14 +336,15 @@ const response = await fetch(targetUrl, {
 clearTimeout(timeoutId);
 ```
 
-### 大小限制
+### 响应透传
 ```javascript
-const text = await response.text();
+const headers = getCorsHeaders(requestOrigin);
+headers.set('Content-Type', response.headers.get('Content-Type') || 'text/plain; charset=utf-8');
 
-// 限制响应大小（最大 5MB）
-if (text.length > 5 * 1024 * 1024) {
-  return createResponse(requestOrigin, 'Response too large (max 5MB)', 413);
-}
+return new Response(response.body, {
+  status: response.status,
+  headers
+});
 ```
 
 ---
@@ -371,7 +371,6 @@ function createResponse(requestOrigin, body, status, contentType = 'text/plain')
 | 403 | 禁止访问 | 域名不在白名单 |
 | 404 | 资源不存在 | 配置键不存在 |
 | 405 | 方法不允许 | 不支持的 HTTP 方法 |
-| 413 | 请求过大 | 响应超过 5MB |
 | 500 | 服务器错误 | 内部错误 |
 | 504 | 网关超时 | 远程请求超时 |
 
@@ -414,7 +413,7 @@ sequenceDiagram
 ### 当前实现
 - ✅ KV 异步读取
 - ✅ 请求超时控制
-- ✅ 响应大小限制
+- ✅ 上游响应流式透传
 
 ### 优化建议
 - [ ] 实现 KV 缓存策略
