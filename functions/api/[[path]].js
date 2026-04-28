@@ -311,6 +311,7 @@ async function handleFetchUrl(request, requestOrigin) {
   // URL 白名单验证
   const allowedDomains = [
     'raw.githubusercontent.com',
+    'api.github.com',
     'github.com',
     'gitlab.com',
     'raw.githubusercontent.com.cn',
